@@ -1,5 +1,3 @@
-#define _POSIX_C_SOURCE 200809L
-
 #include <stdio.h>
 #include <stdlib.h>   /* atoi, rand, srand, realloc, free */
 #include <string.h>   /* strchr, strlen, memmove, strcmp, strtok */
@@ -50,6 +48,11 @@ int buscar(int n, const char *id) {
     return -1;
 }
 
+/* "" a secas es un texto en memoria de solo lectura, y recortar() escribe
+   sobre el, asi que acá usamos una copia que sí se puede modificar.
+   sirve para las líneas que traen menos de 4 campos */
+static char vacio[] = "";
+
 int main(int argc, char **argv) {
     if (argc != 2) {
         printf("Uso: %s plan.txt\n", argv[0]);
@@ -73,7 +76,7 @@ int main(int argc, char **argv) {
             break;
         }
 
-        char *campos[4] = {"", "", "", ""};
+        char *campos[4] = { vacio, vacio, vacio, vacio };
         char *p = linea;
         for (int i = 0; i < 4; i++) {
             campos[i] = p;

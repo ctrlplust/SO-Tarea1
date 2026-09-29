@@ -30,6 +30,8 @@ test: $(PROG)
 	@./$(PROG) ciclo.txt 2 | tail -1
 	@echo "== tiempos al azar (K=2) =="
 	@./$(PROG) vacio.txt 2 | tail -1
+	@echo "== lineas con menos de 4 campos (K=2) =="
+	@./$(PROG) corto.txt 2 | tail -1
 	@echo "== entradas invalidas (deben fallar con 1) =="
 	@./$(PROG) malo1.txt 2; echo "   exit=$$?"
 	@./$(PROG) malo2.txt 2; echo "   exit=$$?"

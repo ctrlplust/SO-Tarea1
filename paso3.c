@@ -1,5 +1,3 @@
-#define _POSIX_C_SOURCE 200809L
-
 #include <stdio.h>    /* printf, fopen, fgets, snprintf */
 #include <stdlib.h>   /* atoi, rand, srand */
 #include <string.h>   /* strchr, strlen, memmove */
@@ -39,6 +37,11 @@ void recortar(char *s) {
     }
 }
 
+/* "" a secas es un texto en memoria de solo lectura, y recortar() escribe
+   sobre el, asi que acá usamos una copia que sí se puede modificar.
+   sirve para las líneas que traen menos de 4 campos */
+static char vacio[] = "";
+
 int main(int argc, char **argv) {
     if (argc != 2) {
         printf("Uso: %s plan.txt\n", argv[0]);
@@ -64,7 +67,7 @@ int main(int argc, char **argv) {
         }
 
         /* --- Igual que el paso 2: cortar la línea en 4 campos --- */
-        char *campos[4] = {"", "", "", ""};
+        char *campos[4] = { vacio, vacio, vacio, vacio };
         char *p = linea;
         for (int i = 0; i < 4; i++) {
             campos[i] = p;

@@ -108,6 +108,11 @@ int abortar_descendientes(int origen, int *pila) {
     return total;
 }
 
+/* "" a secas es un texto en memoria de solo lectura, y recortar() escribe
+   sobre el, asi que acá usamos una copia que sí se puede modificar.
+   sirve para las líneas que traen menos de 4 campos */
+static char vacio[] = "";
+
 int main(int argc, char **argv) {
     if (argc != 3) {
         printf("Uso: %s plan.txt K\n", argv[0]);
@@ -165,7 +170,7 @@ int main(int argc, char **argv) {
         if (n >= MAX_ACTIVIDADES) {
             break;
         }
-        char *campos[4] = {"", "", "", ""};
+        char *campos[4] = { vacio, vacio, vacio, vacio };
         char *p = linea;
         for (int i = 0; i < 4; i++) {
             campos[i] = p;
