@@ -1,12 +1,19 @@
-paso1
-paso2
-paso3
-paso4
-paso5a
-paso5b
-paso6
-paso7
-paso8
-paso9
-planificador
-paso10
+# binarios
+/planificador
+/pasos/paso1
+/pasos/paso2
+/pasos/paso3
+/pasos/paso4
+/pasos/paso5a
+/pasos/paso5b
+/pasos/paso6
+/pasos/paso7
+/pasos/paso8
+/pasos/paso9
+/pasos/paso10
+
+# backups y scratch
+*.bak
+*.o
+*~
+core

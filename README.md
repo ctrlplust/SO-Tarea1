@@ -7,10 +7,24 @@ hay mas de **K** hijos vivos al mismo tiempo.
 las cosas que hay que tener a mano:
 
 ```sh
-make                              # compila
-./planificador plan_ejemplo.txt 3 # corre
-make test                         # las pruebas
+make                                    # compila
+./planificador planes/plan_ejemplo.txt 3   # corre
+make test                               # las pruebas
 ```
+
+## como esta armado el repo
+
+```
+README.md          este archivo
+Makefile           compilar, correr y probar
+planificador.c     el entregable, en la raiz
+pasos/             paso1.c ... paso10.c, la construccion por partes
+planes/            los 10 planes de prueba en .txt
+```
+
+`planificador.c` se queda en la raiz a proposito: la pauta pide compilar con
+`gcc -Wall -Wextra -std=c17 -lpthread -o planificador planificador.c` y ese
+comando tiene que andar tal cual desde la raiz del repo.
 
 ## como compila
 
@@ -18,8 +32,10 @@ make test                         # las pruebas
 gcc -Wall -Wextra -std=c17 -lpthread -o planificador planificador.c
 ```
 
-son los flags que pide la pauta. compila sin un solo warning, y los doce archivos
-`.c` del repo compilan con el mismo comando.
+son los flags que pide la pauta, y compila sin un solo warning. `planificador.c`
+esta en la raiz a proposito, pa que ese comando se pueda correr tal cual desde
+arriba. los doce pasos de `pasos/` compilan con el mismo comando y sin warnings
+tambien, y `make test-pasos` los revisa todos de una.
 
 el detalle que hace falta: con `-std=c17` (que es ISO estricto) glibc esconde las
 declaraciones POSIX, asi que el archivo arranca con
@@ -45,8 +61,8 @@ hilos: usa procesos.
 con el Makefile:
 
 ```sh
-make run                        # plan_ejemplo.txt con K=3
-make run PLAN=estres.txt K=10000
+make run                              # planes/plan_ejemplo.txt con K=3
+make run PLAN=planes/estres.txt K=10000
 ```
 
 ## formato del plan
@@ -92,7 +108,7 @@ Resumen: 6 ok, 0 fallidas, 0 abortadas por falla
   arrancar hasta que terminan.
 - **maximo de procesos simultaneos** es el pico real de hijos vivos, y nunca pasa
   K. puede quedar bastante por debajo, porque lo que limita el paralelismo es la
-  forma del grafo y no K: en `estres.txt` (10 000 actividades) el pico son unos
+  forma del grafo y no K: en `planes/estres.txt` (10 000 actividades) el pico son
   1500 aunque le des K = 10 000.
 - **resumen** cuenta las tres salidas posibles de una actividad: termino bien,
   termino con error, o nunca corrio porque fallo algo de lo que dependia.
@@ -108,7 +124,7 @@ Aborto [3] c (depende de una actividad fallida)
 ### el limite K en la practica
 
 `K = 1` sale todo secuencial, uno atras de otro. `K = 2` o `K = 3` ya se ven
-varios hijos corriendo al mismo tiempo. `K = 10000` sobre `estres.txt` no alcanza
+varios hijos corriendo al mismo tiempo. `K = 10000` sobre `planes/estres.txt` no alcanza
 para 10 000 en paralelo, y no es un bug: el grafo no deja.
 
 ### Ctrl+C
@@ -151,8 +167,8 @@ los dos casos estan bien: en los dos se cumple "nunca mas de K procesos".
 para verlo:
 
 ```sh
-ulimit -n 1024;  ./planificador estres.txt 10000     # aviso, baja K
-ulimit -Sn 1024; ./planificador estres.txt 10000     # lo sube, sin aviso
+ulimit -n 1024;  ./planificador planes/estres.txt 10000   # aviso, baja K
+ulimit -Sn 1024; ./planificador planes/estres.txt 10000   # lo sube, sin aviso
 ```
 
 ## codigos de salida
@@ -192,24 +208,26 @@ cubre: plan valido, fallo con cascada, ciclo, tiempo al azar, lineas con menos d
 4 campos, los tres tipos de plan invalido, y el estres de 10 000 actividades con
 K = 10 000.
 
+estan todos en `planes/`:
+
 | Archivo | Que prueba |
 |---|---|
-| `plan_ejemplo.txt` | el plan de ejemplo de la consigna |
-| `falla.txt` | una actividad con `!` y la cascada de abortadas |
-| `ciclo.txt` | dos actividades que dependen la una de la otra |
-| `largo.txt` | actividades de 5 s, para probar el Ctrl+C |
-| `vacio.txt` | tiempo al azar |
-| `corto.txt` | lineas con menos de 4 campos |
-| `malo1.txt` | dependencia inexistente |
-| `malo2.txt` | id repetido |
-| `malo3.txt` | tiempo no numerico |
-| `estres.txt` | 10 000 actividades con dependencias al azar |
+| `planes/plan_ejemplo.txt` | el plan de ejemplo de la consigna |
+| `planes/falla.txt` | una actividad con `!` y la cascada de abortadas |
+| `planes/ciclo.txt` | dos actividades que dependen la una de la otra |
+| `planes/largo.txt` | actividades de 5 s, para probar el Ctrl+C |
+| `planes/vacio.txt` | tiempo al azar |
+| `planes/corto.txt` | lineas con menos de 4 campos |
+| `planes/malo1.txt` | dependencia inexistente |
+| `planes/malo2.txt` | id repetido |
+| `planes/malo3.txt` | tiempo no numerico |
+| `planes/estres.txt` | 10 000 actividades con dependencias al azar |
 
 el Ctrl+C hay que probarlo a mano, porque `make` no lo puede interrumpir:
 
 ```sh
-./planificador largo.txt 2     # en otra terminal, Ctrl+C
-pgrep planificador             # no debe imprimir nada
+./planificador planes/largo.txt 2   # en otra terminal, Ctrl+C
+pgrep planificador                 # no debe imprimir nada
 ```
 
 ## los pasos
@@ -220,19 +238,19 @@ depurar por partes; para entregar basta `planificador.c`.
 
 | Paso | Que se agrega |
 |---|---|
-| `paso1.c` | lee el archivo y muestra las lineas |
-| `paso2.c` | parte cada linea por `:` en 4 campos, con `recortar` |
-| `paso3.c` | estructura `Actividad` y arreglo `lista` |
-| `paso4.c` | traduce las dependencias de texto a posiciones |
-| `paso5a.c` | sucesores y orden de ejecucion (Kahn) simulado, sin procesos todavia |
-| `paso5b.c` | `fork` de verdad, respetando el limite K, con la espera de cada actividad |
-| `paso6.c` | pipes: insumos de entrada y mensaje de resultado |
-| `paso7.c` | fallos aislados por rama, con la cascada de abortadas |
-| `paso8.c` | Ctrl+C limpio: sin zombis ni señales perdidas |
-| `paso9.c` | limite de descriptores y cierre comun ante error del sistema |
-| `paso10.c` | validaciones: id repetido y tiempo no numerico |
+| `pasos/paso1.c` | lee el archivo y muestra las lineas |
+| `pasos/paso2.c` | parte cada linea por `:` en 4 campos, con `recortar` |
+| `pasos/paso3.c` | estructura `Actividad` y arreglo `lista` |
+| `pasos/paso4.c` | traduce las dependencias de texto a posiciones |
+| `pasos/paso5a.c` | sucesores y orden de ejecucion (Kahn) simulado, sin procesos todavia |
+| `pasos/paso5b.c` | `fork` de verdad, respetando el limite K, con la espera de cada actividad |
+| `pasos/paso6.c` | pipes: insumos de entrada y mensaje de resultado |
+| `pasos/paso7.c` | fallos aislados por rama, con la cascada de abortadas |
+| `pasos/paso8.c` | Ctrl+C limpio: sin zombis ni señales perdidas |
+| `pasos/paso9.c` | limite de descriptores y cierre comun ante error del sistema |
+| `pasos/paso10.c` | validaciones: id repetido y tiempo no numerico |
 
-`paso5a` y `paso5b` estan partidos a proposito: el primero muestra el orden de
+`paso5a.c` y `paso5b.c` estan partidos a proposito: el primero muestra el orden de
 ejecucion (que se puede hacer con dos contadores y sin un solo proceso), y el
 segundo es el mismo orden pero con `fork` de verdad. verlos separados deja claro
 que el algoritmo de Kahn y el `fork` son dos cosas distintas.
@@ -297,9 +315,9 @@ que el algoritmo de Kahn y el `fork` son dos cosas distintas.
 
 ## archivos
 
-| Archivo | Que es |
+| Ruta | Que es |
 |---|---|
-| `planificador.c` | el programa completo, un solo archivo |
-| `Makefile` | `all`, `run`, `test`, `clean` |
-| `paso1.c` … `paso10.c` | la construccion paso a paso (con `paso5a` y `paso5b`) |
-| `*.txt` | los planes de prueba |
+| `planificador.c` | el programa completo, un solo archivo, en la raiz |
+| `Makefile` | `all`, `run`, `test`, `test-pasos`, `clean` |
+| `pasos/` | la construccion paso a paso, `paso1.c` … `paso10.c` |
+| `planes/` | los 10 planes de prueba en `.txt` |
