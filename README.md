@@ -44,7 +44,7 @@ declaraciones POSIX, asi que el archivo arranca con
 #define _POSIX_C_SOURCE 200809L
 ```
 
-**antes del primer `#include`**. sin esa linea no compila: tiran
+**antes del primer `#include`**. sin esa linea no compila: salen
 `unknown type name 'sigset_t'` o `implicit declaration of function 'fork'`.
 `-lpthread` va en el comando porque lo pide la pauta, aunque el programa no usa
 hilos: usa procesos.
