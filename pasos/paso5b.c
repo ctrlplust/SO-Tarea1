@@ -236,7 +236,7 @@ int main(int argc, char **argv) {
         }
 
         /* (c) esperamos a UN hijo, el que termine primero. el 0 del final dice
-               "dormime hasta que pase algo" y el -1 "cualquiera de mis
+               "duermeme hasta que pase algo" y el -1 "cualquiera de mis
                hijos": solo podemos esperar a los que creamos nosotros con
                fork. lo llamamos una vez por vuelta pa liberar el cupo y
                avisar a los sucesores apenas uno termina */
