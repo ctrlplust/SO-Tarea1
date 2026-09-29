@@ -34,7 +34,7 @@ gcc -Wall -Wextra -std=c17 -lpthread -o planificador planificador.c
 
 son los flags que pide la pauta, y compila sin un solo warning. `planificador.c`
 esta en la raiz a proposito, pa que ese comando se pueda correr tal cual desde
-arriba. los doce pasos de `pasos/` compilan con el mismo comando y sin warnings
+arriba. los once pasos de `pasos/` compilan con el mismo comando y sin warnings
 tambien, y `make test-pasos` los revisa todos de una.
 
 el detalle que hace falta: con `-std=c17` (que es ISO estricto) glibc esconde las
@@ -254,6 +254,12 @@ depurar por partes; para entregar basta `planificador.c`.
 ejecucion (que se puede hacer con dos contadores y sin un solo proceso), y el
 segundo es el mismo orden pero con `fork` de verdad. verlos separados deja claro
 que el algoritmo de Kahn y el `fork` son dos cosas distintas.
+
+## limitaciones conocidas
+
+- las dependencias de una actividad se guardan en 512 caracteres: una linea
+  con cientos de dependencias se corta.
+- las lineas en blanco no se saltan: se leen como una actividad sin ID.
 
 ## decisiones de diseño
 
