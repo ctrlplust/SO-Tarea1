@@ -14,7 +14,6 @@ typedef struct {
     int  aleatorio;
     char deps_txt[512];   /* dependencias como texto: "1, 2" */
 
-    /* NUEVO: las dependencias ya convertidas */
     int *deps;            /* posiciones (en "lista") de las que dependo */
     int  ndeps;           /* cuántas dependencias tengo */
     int  pendientes;      /* cuántas faltan por terminar (parte igual a ndeps) */
@@ -37,8 +36,6 @@ void recortar(char *s) {
     }
 }
 
-/* NUEVO: busca un ID en la lista.
-   Devuelve la posición donde está, o -1 si no existe. */
 /* recorre la lista comparando el id con strcmp y devuelve la posición en la
    que está, o -1 si no aparece. necesitamos la posición y no el id porque
    después vamos a leer lista[j] directo */
@@ -113,18 +110,14 @@ int main(int argc, char **argv) {
     }
     fclose(f);
 
-    /* ---- NUEVO, PASADA 2: convertir "1, 2" en posiciones ----
+    /* ---- PASADA 2: convertir "1, 2" en posiciones ----
        Se hace DESPUÉS de leer todo, porque una actividad puede depender
        de otra que aparece más abajo en el archivo. */
     for (int i = 0; i < n; i++) {
 
-        /* strtok destruye el texto que corta, así que trabajamos
-           sobre una copia y dejamos deps_txt intacto. */
         char copia[512];
         snprintf(copia, sizeof(copia), "%s", lista[i].deps_txt);
 
-        /* strtok corta "copia" en pedazos separados por comas.
-           La 1ª vez se le pasa el texto; las siguientes, NULL. */
         /* strtok va metiendo '\0' en el texto que va partiendo, así que si lo
            aplicáramos sobre deps_txt lo dejaría mutilado. por eso partimos una
            copia y deps_txt queda intacto.
@@ -142,7 +135,6 @@ int main(int argc, char **argv) {
                     return 1;
                 }
 
-                /* agrandar el arreglo deps en 1 casilla y guardar j */
                 /* no sabemos de antemano cuántas dependencias trae la línea,
                    así que el arreglo se agranda de a una. realloc devuelve el
                    mismo puntero con el lugar nuevo (puede moverlo a otra
@@ -173,7 +165,6 @@ int main(int argc, char **argv) {
         printf("\n");
     }
 
-    /* Liberar la memoria pedida con realloc */
     /* lo que se agrandó con realloc hay que devolverlo */
     for (int i = 0; i < n; i++) {
         free(lista[i].deps);

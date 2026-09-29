@@ -38,7 +38,6 @@ typedef struct {
     int  fd_res;
     char msg[MSG_MAX];
 
-    /* NUEVO */
     int  falla;       /* 1 si el nombre venía con '!': fallo a propósito */
     int  estado;      /* EST_PEND / EST_OK / EST_FALLIDA / EST_ABORTADA */
 } Actividad;
@@ -152,8 +151,8 @@ int main(int argc, char **argv) {
         snprintf(a->nombre, sizeof(a->nombre), "%s", campos[1]);
         snprintf(a->deps_txt, sizeof(a->deps_txt), "%s", campos[3]);
 
-        /* NUEVO: si el nombre empieza con '!', esta actividad va a fallar.
-           Le quitamos el '!' para que el nombre se vea normal. */
+        /* si el nombre empieza con '!' la actividad va a fallar, y le
+           quitamos el '!' pa que el nombre se vea normal */
         if (a->nombre[0] == '!') {
             memmove(a->nombre, a->nombre + 1, strlen(a->nombre));
             recortar(a->nombre);
@@ -217,9 +216,8 @@ int main(int argc, char **argv) {
         }
     }
 
-    /* ---- Cola inicial ---- */
     int *cola = malloc(sizeof(int) * n);
-    int *pila = malloc(sizeof(int) * n);   /* NUEVO: para abortar_descendientes */
+    int *pila = malloc(sizeof(int) * n);   /* la usa abortar_descendientes */
     int ini = 0, fin = 0;
 
     for (int i = 0; i < n; i++) {
@@ -229,15 +227,14 @@ int main(int argc, char **argv) {
         }
     }
 
-    /* ---- Scheduler ---- */
     int activos = 0;
     int max_activos = 0;
     int oks = 0;          /* terminaron bien */
-    int fallidas = 0;     /* NUEVO: terminaron con error */
-    int abortadas = 0;    /* NUEVO: nunca se lanzaron */
+    int fallidas = 0;     /* terminado con error */
+    int abortadas = 0;    /* nunca llegaron a lanzarse */
 
-    /* NUEVO: una actividad queda "resuelta" si terminó bien, falló o fue
-       abortada. El loop sigue hasta que todas estén resueltas. */
+    /* una actividad queda "resuelta" si terminó bien, falló o fue abortada.
+       el loop sigue hasta que todas estén resueltas */
     while (oks + fallidas + abortadas < n) {
 
         /* (a) Lanzar mientras haya listas en la cola y cupo (activos < K) */
@@ -278,9 +275,8 @@ int main(int argc, char **argv) {
                 espera.tv_nsec = (lista[i].tiempo_ms % 1000) * 1000000L;
                 nanosleep(&espera, NULL);
 
-                /* NUEVO: fallo simulado. Termina con código 1 y sin
-                   mandar mensaje. */
-                /* el '!' en el nombre marca que esta actividad falla */
+                /* el '!' en el nombre marca que esta actividad falla: sale
+                   con código 1 y sin mandar ningún mensaje */
                 if (lista[i].falla) {
                     printf("  [%s] %s: FALLO\n", lista[i].id, lista[i].nombre);
                     fflush(stdout);
@@ -346,7 +342,6 @@ int main(int argc, char **argv) {
                 continue;
             }
 
-            /* NUEVO: ¿terminó bien? = salió normalmente con código 0 */
             /* waitpid nos deja el motivo de terminación en st: WIFEXITED
                pregunta si el hijo salió por su cuenta y WEXITSTATUS saca el
                código con el que terminó (el hijo usa _exit(1) al fallar) */
@@ -378,7 +373,7 @@ int main(int argc, char **argv) {
                     }
                 }
             } else {
-                /* NUEVO: falló. Cerramos su pipe, la marcamos y abortamos
+                /* falló: cerramos su pipe, la marcamos y abortamos
                    solo a sus descendientes. Las otras ramas siguen. */
                 close(lista[i].fd_res);
                 lista[i].estado = EST_FALLIDA;

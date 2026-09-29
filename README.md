@@ -1,68 +1,70 @@
-# Planificador de actividades con procesos y pipes
+# planificador de actividades con procesos y pipes
 
-Programa en C que ejecuta un plan de actividades usando procesos del sistema
-operativo: cada actividad es un hijo creado con `fork()`, y los mensajes
-"insumo" y "resultado" se pasan entre padre e hijo por pipes. Nunca hay más de
-**K** procesos vivos al mismo tiempo.
+el planificador lee un `plan.txt`, arma el grafo de actividades y corre cada una
+en un proceso hijo. los mensajes de insumos y de resultados van por pipes, y nunca
+hay mas de **K** hijos vivos al mismo tiempo.
 
-## Compilar
+las cosas que hay que tener a mano:
 
 ```sh
-make
+make                              # compila
+./planificador plan_ejemplo.txt 3 # corre
+make test                         # las pruebas
 ```
 
-Genera `./planificador`. Equivale a:
+## como compila
 
 ```sh
 gcc -Wall -Wextra -std=c17 -lpthread -o planificador planificador.c
 ```
 
-Son los flags que pide la pauta, y compila sin un solo warning. Para que
-funcione con `-std=c17` (que es ISO estricto) el archivo empieza con:
+son los flags que pide la pauta. compila sin un solo warning, y los doce archivos
+`.c` del repo compilan con el mismo comando.
+
+el detalle que hace falta: con `-std=c17` (que es ISO estricto) glibc esconde las
+declaraciones POSIX, asi que el archivo arranca con
 
 ```c
 #define _POSIX_C_SOURCE 200809L
 ```
 
-Sin esa línea, que tiene que ir **antes del primer `#include`**, glibc esconde
-las declaraciones POSIX y el archivo no compila: dan errores del tipo
+**antes del primer `#include`**. sin esa linea no compila: tiran
 `unknown type name 'sigset_t'` o `implicit declaration of function 'fork'`.
 `-lpthread` va en el comando porque lo pide la pauta, aunque el programa no usa
 hilos: usa procesos.
 
-## Ejecutar
+## como se ejecuta
 
 ```sh
 ./planificador plan.txt K
 ```
 
 - `plan.txt`: el plan de actividades.
-- `K`: máximo de procesos simultáneos (entero >= 1).
+- `K`: maximo de procesos vivos a la vez (entero >= 1).
 
-Con el Makefile:
+con el Makefile:
 
 ```sh
-make run                        # usa plan_ejemplo.txt con K=3
+make run                        # plan_ejemplo.txt con K=3
 make run PLAN=estres.txt K=10000
 ```
 
-## Formato del plan
+## formato del plan
 
-Una línea por actividad, con los campos separados por `:`:
+una linea por actividad, con los campos separados por `:`:
 
 ```
 id : nombre : tiempo_ms : dependencias
 ```
 
-- **id**: identidad de la actividad, como texto. No puede repetirse.
-- **nombre**: lo que se imprime; si empieza con `!` la actividad **falla**
-  a propósito (el `!` no forma parte del nombre).
-- **tiempo_ms**: duración simulada. Si va vacío, sale al azar entre 100 y
-  5000 ms.
-- **dependencias**: IDs separados por coma, de los que esta actividad
-  necesita el resultado. Vacío = no depende de nadie.
+- **id**: identidad de la actividad, texto. no puede repetirse.
+- **nombre**: lo que se imprime. si arranca con `!` la actividad **falla** a
+  proposito, y el `!` no forma parte del nombre.
+- **tiempo_ms**: duracion simulada. si va vacio, sale al azar entre 100 y 5000 ms.
+- **dependencias**: ids separados por coma. vacio = no depende de nadie.
 
-Se ignoran los espacios sobrantes al principio y al final de cada campo.
+los espacios sobrantes al principio y al final de cada campo se ignoran, y tambien
+las lineas que traen menos de 4 campos (lo que falte queda vacio).
 
 ```
 1 : prender_carbon : 500 :
@@ -73,100 +75,47 @@ Se ignoran los espacios sobrantes al principio y al final de cada campo.
 6 : servir_mesa : 100 : 5
 ```
 
-## Qué imprime
+## lo que hay que mirar cuando corre
 
-Por cada actividad, cuando arranca y cuando termina:
+esto es lo importante de la ejecucion, y como se ve:
 
 ```
-  [1] prender_carbon: empieza (500 ms). Insumos: []
-Termino [1] prender_carbon -> mensaje: "prender_carbon listo"
   [4] asar_longaniza: empieza (800 ms). Insumos: [1(prender_carbon): prender_carbon listo; 2(comprar_carne): comprar_carne listo; ]
 Termino [4] asar_longaniza -> mensaje: "asar_longaniza listo"
-```
 
-Al final:
-
-```
 Maximo de procesos simultaneos: 3 (K = 3)
 Resumen: 6 ok, 0 fallidas, 0 abortadas por falla
 ```
 
-- **Maximo de procesos simultaneos** es el pico real de hijos vivos, y nunca
-  supera K. Puede quedar bastante por debajo: lo que limita el paralelismo es
-  la forma del grafo, no K. En `estres.txt` (10 000 actividades) el pico son
-  unos 1500 aunque se le dé K = 10 000.
-- **Resumen** cuenta las tres salidas posibles de una actividad: terminó bien,
-  terminó con error, o nunca corrió porque falló algo de lo que dependía.
+- la linea `Insumos:` es la prueba de que las pipes van bien: el hijo recibio de
+  veras los mensajes de las actividades de las que depende, y por eso no puede
+  arrancar hasta que terminan.
+- **maximo de procesos simultaneos** es el pico real de hijos vivos, y nunca pasa
+  K. puede quedar bastante por debajo, porque lo que limita el paralelismo es la
+  forma del grafo y no K: en `estres.txt` (10 000 actividades) el pico son unos
+  1500 aunque le des K = 10 000.
+- **resumen** cuenta las tres salidas posibles de una actividad: termino bien,
+  termino con error, o nunca corrio porque fallo algo de lo que dependia.
 
-Cuando una actividad falla, se aborta en cascada todo lo que dependía de ella:
+cuando una actividad falla, se aborta solo la rama que dependia de ella, y las
+que no tenian nada que ver siguen su curso normal:
 
 ```
 Fallo [2] b
 Aborto [3] c (depende de una actividad fallida)
 ```
 
-## Códigos de salida
+### el limite K en la practica
 
-| Código | Cuándo |
-|---|---|
-| 0 | Todo resolvió: `ok + fallidas + abortadas == total` |
-| 1 | Plan inválido, error de sistema, o el plan tiene un ciclo |
-| 130 | Interrumpido con Ctrl+C (128 + SIGINT) |
+`K = 1` sale todo secuencial, uno atras de otro. `K = 2` o `K = 3` ya se ven
+varios hijos corriendo al mismo tiempo. `K = 10000` sobre `estres.txt` no alcanza
+para 10 000 en paralelo, y no es un bug: el grafo no deja.
 
-Un plan con ciclo se detecta al final, cuando ya no queda nada por lanzar ni
-por esperar y sobran actividades sin resolver:
+### Ctrl+C
 
-```
-Error: el plan tiene un ciclo (0 de 2 actividades resueltas).
-```
-
-## Errores del plan
-
-| Mensaje | Causa |
-|---|---|
-| `Error: '2' depende de 'fantasma', que no existe.` | dependencia con ID inexistente |
-| `Error: ID repetido '1' (linea 3).` | dos actividades con el mismo ID |
-| `Error: tiempo no numerico 'abc' en la actividad '2' (linea 2).` | el tiempo no es un entero |
-| `Error: tiempo negativo '-5' ...` | duración negativa |
-
-Los tres se detectan **antes** de crear cualquier proceso, así que no queda
-nada corriendo cuando se imprimen.
-
-## K y el límite de descriptores
-
-Cada pipe es un descriptor de archivo, y el sistema impone un tope de
-descriptores abiertos por proceso (`ulimit -n`). El padre guarda una pipe de
-resultado por cada hijo vivo, así que un K enorme choca con ese tope. Por eso
-al arrancar el programa:
-
-1. **Sube el límite blando** con `setrlimit` hasta 65 536 o hasta el límite
-   duro, lo que sea menor. Si tu `ulimit -Hn` es alto, esto basta y el programa
-   corre sin decir nada.
-2. **Si aun así no cabe, baja K** y avisa, dejando siempre margen para
-   `stdin`/`stdout`/`stderr` y para la cola de lanzamiento:
-
-   ```
-   Aviso: K=10000 no cabe en el limite de descriptores (1024); uso K=1004
-   ```
-
-   El K efectivo aparece en la línea final (`(K = 1004)`).
-
-Los dos casos son correctos: en ambos se cumple "nunca más de K procesos".
-
-Para verlo:
-
-```sh
-ulimit -n 1024; ./planificador estres.txt 10000     # aviso, baja K
-ulimit -Sn 1024; ./planificador estres.txt 10000    # lo sube, sin aviso
-```
-
-## Ctrl+C
-
-Con Ctrl+C el programa no se muere de golpe: mata a los hijos que están
-corriendo con `SIGTERM`, espera a cada uno con `waitpid` para no dejar
-zombis, marca todo lo demás como abortado y sale con 130. Es el mismo cierre
-que se usa si `pipe()` o `fork()` fallan, justamente para que un error del
-sistema tampoco deje hijos huérfanos.
+con Ctrl+C el programa no se muere de golpe. mata a los hijos que estan corriendo
+con `SIGTERM`, espera a cada uno con `waitpid` pa que no queden zombis, marca todo
+lo demas como abortado y sale con 130:
 
 ```
 *** Llego la Seremi (Ctrl+C): abortando todas las actividades ***
@@ -174,83 +123,183 @@ Aborto [1] a (estaba en ejecucion)
 Interrumpido: 2 en ejecucion cortadas, 2 sin lanzar
 ```
 
-Los hijos ignoran `SIGINT`, así que el corte lo maneja solo el padre y no
-importa si el Ctrl+C llega al grupo de procesos completo o solo al padre.
+los hijos ignoran `SIGINT`, asi que el corte lo maneja solo el padre y no importa
+si el Ctrl+C llega al grupo de procesos completo o solo al padre. es el mismo
+bloque de cierre que se usa si `pipe()` o `fork()` fallan, justamente pa que un
+error del sistema tampoco deje hijos huerfanos.
 
-## Pruebas
+## K contra el limite de descriptores
+
+cada pipe es un descriptor de archivo, y el sistema pone un tope de descriptores
+abiertos por proceso (`ulimit -n`). el padre guarda una pipe de resultado por cada
+hijo vivo, asi que un K enorme choca con ese tope. por eso al arrancar:
+
+1. **sube el limite blando** con `setrlimit` hasta 65 536 o hasta el limite duro,
+   lo que sea menor. si tu `ulimit -Hn` es alto, esto basta y el programa corre
+   sin decir nada.
+2. **si aun asi no cabe, baja K** y avisa, dejando margen para
+   `stdin`/`stdout`/`stderr` y para la cola de lanzamiento:
+
+   ```
+   Aviso: K=10000 no cabe en el limite de descriptores (1024); uso K=1004
+   ```
+
+   el K efectivo aparece en la linea final (`(K = 1004)`).
+
+los dos casos estan bien: en los dos se cumple "nunca mas de K procesos".
+
+para verlo:
+
+```sh
+ulimit -n 1024;  ./planificador estres.txt 10000     # aviso, baja K
+ulimit -Sn 1024; ./planificador estres.txt 10000     # lo sube, sin aviso
+```
+
+## codigos de salida
+
+| Codigo | Cuando |
+|---|---|
+| 0 | todo resolvio: `ok + fallidas + abortadas == total` |
+| 1 | plan invalido, error del sistema, o el plan tiene un ciclo |
+| 130 | interrumpido con Ctrl+C (128 + SIGINT) |
+
+un plan con ciclo se detecta al final, cuando ya no queda nada por lanzar ni por
+esperar y sobran actividades sin resolver:
+
+```
+Error: el plan tiene un ciclo (0 de 2 actividades resueltas).
+```
+
+## errores del plan
+
+| Mensaje | Causa |
+|---|---|
+| `Error: '2' depende de 'fantasma', que no existe.` | dependencia con id inexistente |
+| `Error: ID repetido '1' (linea 3).` | dos actividades con el mismo id |
+| `Error: tiempo no numerico 'abc' en la actividad '2' (linea 2).` | el tiempo no es un entero |
+| `Error: tiempo negativo '-5' ...` | duracion negativa |
+
+los cuatro se detectan **antes** de crear cualquier proceso, asi que cuando se
+imprimen no hay nada corriendo.
+
+## pruebas
 
 ```sh
 make test
 ```
 
-Cubre: plan válido, fallo con cascada, ciclo, tiempo al azar, los tres tipos de
-plan inválido, y el estrés de 10 000 actividades con K = 10 000.
+cubre: plan valido, fallo con cascada, ciclo, tiempo al azar, lineas con menos de
+4 campos, los tres tipos de plan invalido, y el estres de 10 000 actividades con
+K = 10 000.
 
-Los archivos de prueba:
-
-| Archivo | Qué prueba |
+| Archivo | Que prueba |
 |---|---|
 | `plan_ejemplo.txt` | el plan de ejemplo de la consigna |
 | `falla.txt` | una actividad con `!` y la cascada de abortadas |
 | `ciclo.txt` | dos actividades que dependen la una de la otra |
-| `largo.txt` | actividades de 5 s, para probar Ctrl+C |
+| `largo.txt` | actividades de 5 s, para probar el Ctrl+C |
 | `vacio.txt` | tiempo al azar |
+| `corto.txt` | lineas con menos de 4 campos |
 | `malo1.txt` | dependencia inexistente |
-| `malo2.txt` | ID repetido |
-| `malo3.txt` | tiempo no numérico |
+| `malo2.txt` | id repetido |
+| `malo3.txt` | tiempo no numerico |
 | `estres.txt` | 10 000 actividades con dependencias al azar |
 
-Ctrl+C a mano:
+el Ctrl+C hay que probarlo a mano, porque `make` no lo puede interrumpir:
 
 ```sh
 ./planificador largo.txt 2     # en otra terminal, Ctrl+C
 pgrep planificador             # no debe imprimir nada
 ```
 
-## Decisiones de diseño
+## los pasos
 
-- **Sin threads**: cada actividad es un proceso, que es lo que pide la
-  consigna, y aísla los fallos: si una actividad revienta, las demás siguen.
-- **IDs como texto**, no como índices: el archivo es legible y el orden de las
-  líneas no importa para nombrar. El ID se traduce a posición una sola vez
-  (pasada de dependencias).
-- **Lista inversa de sucesores**: cuando una actividad termina, solo se
-  recorren las que dependen de ella, en vez de revisar las 10 000.
-- **Búsqueda lineal** para traducir ID a posición: 10 000 comparaciones de
-  texto por dependencia son nada al lado de crear 10 000 procesos.
-- **`waitpid` con `sigsuspend`** en vez de polling: el padre bloquea
-  `SIGINT` y `SIGCHLD` y duerme con `sigsuspend`, que solo vuelve cuando llega
-  alguna de las dos. Así no se pierde ninguna señal y no hay busy loop.
-- **Aleatorio de veras**: `srand(time(NULL))` sin `srand` fijo, para que dos
-  corridas den tiempos distintos.
-- **Tope de 10 000 actividades** (`MAX_ACTIVIDADES`).
+cada `pasoN.c` es el estado del programa despues de esa pieza, y el siguiente
+arranca copiando el anterior. sirven pa mostrar el orden en que se construyo y pa
+depurar por partes; para entregar basta `planificador.c`.
 
-## Archivos
-
-| Archivo | Qué es |
+| Paso | Que se agrega |
 |---|---|
-| `planificador.c` | el programa completo, un solo archivo |
-| `Makefile` | `all`, `run`, `test`, `clean` |
-| `paso1.c` … `paso10.c` | la construcción paso a paso (ver abajo) |
-| `*.txt` | los planes de prueba |
-
-### Los pasos
-
-Cada `pasoN.c` es el estado del programa después de esa pieza, y el siguiente
-arranca copiando el anterior. Sirven para mostrar el orden en que se construyó
-y para depurar por partes; para entregar basta `planificador.c`.
-
-| Paso | Qué se agrega |
-|---|---|
-| `paso1.c` | lee el archivo y muestra las líneas |
-| `paso2.c` | parte cada línea por `:` en 4 campos, con `recortar` |
+| `paso1.c` | lee el archivo y muestra las lineas |
+| `paso2.c` | parte cada linea por `:` en 4 campos, con `recortar` |
 | `paso3.c` | estructura `Actividad` y arreglo `lista` |
 | `paso4.c` | traduce las dependencias de texto a posiciones |
-| `paso5a.c` | lista de sucesores y orden de ejecución (Kahn) simulado, sin procesos todavía |
-| `paso5b.c` | `fork` de verdad, respetando el límite K, con la espera de cada actividad |
+| `paso5a.c` | sucesores y orden de ejecucion (Kahn) simulado, sin procesos todavia |
+| `paso5b.c` | `fork` de verdad, respetando el limite K, con la espera de cada actividad |
 | `paso6.c` | pipes: insumos de entrada y mensaje de resultado |
 | `paso7.c` | fallos aislados por rama, con la cascada de abortadas |
 | `paso8.c` | Ctrl+C limpio: sin zombis ni señales perdidas |
-| `paso9.c` | límite de descriptores y cierre común ante error del sistema |
-| `paso10.c` | validaciones: ID repetido y tiempo no numérico |
+| `paso9.c` | limite de descriptores y cierre comun ante error del sistema |
+| `paso10.c` | validaciones: id repetido y tiempo no numerico |
 
+`paso5a` y `paso5b` estan partidos a proposito: el primero muestra el orden de
+ejecucion (que se puede hacer con dos contadores y sin un solo proceso), y el
+segundo es el mismo orden pero con `fork` de verdad. verlos separados deja claro
+que el algoritmo de Kahn y el `fork` son dos cosas distintas.
+
+## decisiones de diseño
+
+- **sin threads**: cada actividad es un proceso, que es lo que pide la consigna, y
+  aísla los fallos: si una actividad revienta, las demas siguen.
+- **los campos del plan son arreglos fijos, no `char*`**: los punteros que da
+  `strtok` apuntan adentro de `linea`, y `linea` se pisa en cada vuelta del
+  `fgets`. con un `char*` estariamos guardando la direccion de un texto que ya no
+  existe. las dependencias si son `int *`, porque esas se agrandan con `realloc`.
+- **ids como texto, no como indices**: el archivo queda legible y el orden de las
+  lineas no importa pa nombrar. el id se traduce a posicion una sola vez, en la
+  pasada de dependencias.
+- **la pasada de dependencias va despues de leer todo**: una actividad puede
+  depender de otra que aparece mas abajo en el archivo, asi que si la buscáramos
+  al leerla todavia no estaria en la lista.
+- **busqueda lineal** para traducir id a posicion: 10 000 comparaciones de texto
+  por dependencia son nada al lado de crear 10 000 procesos.
+- **lista inversa de sucesores**: cuando una actividad termina, solo se recorren
+  las que dependen de ella, en vez de revisar las 10 000.
+- **`strtok` sobre una copia**: `strtok` va metiendo `'\0'` en el texto que va
+  partiendo, asi que si lo aplicáramos sobre `deps_txt` lo dejaria mutilado.
+- **`atoi` no sirve pa validar**: ante `"abc"` devuelve 0 en silencio y la
+  actividad terminaria al instante. por eso el tiempo se comprueba con `strtol`
+  antes, que si dice hasta donde leyo.
+- **`waitpid` con `sigsuspend`** en vez de polling: el padre bloquea `SIGINT` y
+  `SIGCHLD` y duerme con `sigsuspend`, que solo vuelve cuando llega alguna de las
+  dos. asi no se pierde ninguna señal y no hay busy loop. con `waitpid` bloqueado
+  sin `WNOHANG` el padre se quedaria esperando solo por el primer hijo, y el
+  Ctrl+C no se veria hasta que terminara.
+- **dos pipes por actividad**: una pipe va en un solo sentido, asi que el
+  resultado (hijo -> padre) y los insumos (padre -> hijo) van por canales
+  separados. con una sola se mezclarian los buffers.
+- **`fflush(stdout)` antes del `fork`**: stdout tiene un buffer en memoria, y si
+  queda con cosas pendientes el hijo hereda una copia y las vuelve a imprimir.
+- **`_exit` y no `return` en el hijo**: con `return` el seguiria con el resto de
+  `main` y el planificador se clonaria entero.
+- **el padre cierra `ent[1]` apenas escribe**: ese cierre es lo que le avisa al
+  hijo que no viene nada mas, y su `read` devuelve 0. si el padre lo dejara
+  abierto, el hijo se quedaria bloqueado para siempre.
+- **el padre guarda el `fd` del resultado y no lo lee al tiro**: leer en el
+  momento del `fork` lo dejaria esperando a que el hijo termine, y el plan
+  correria de a uno.
+- **cada proceso cierra los extremos de pipe que no usa**: con 10 000 actividades
+  cada descriptor de mas se nota, y es justo el limite que ajusta el `setrlimit`.
+- **`volatile sig_atomic_t` para la bandera del corte**: es lo unico que se puede
+  tocar con seguridad desde un manejador de señal, y el manejador solo levanta la
+  bandera: adentro no se pueden llamar funciones de la biblioteca.
+- **el hijo ignora `SIGINT`**: el corte lo maneja el padre, que va matando de a uno
+  y asi decide el orden.
+- **cualquier fallo de `pipe()` o `fork()` pasa por el mismo cierre que el
+  Ctrl+C**: si nos vamos en el medio con un `return`, los hijos que ya estan
+  corriendo quedan sin padre.
+- **la lista es `static` y global**: 10 000 actividades ocupan unos 6,8 MB y la
+  pila son 8 MB, asi que como variable local reventaba. `static` ademas la deja en
+  cero al empezar, que es justo lo que queremos en las casillas sin usar.
+- **aleatorio de veras**: `srand(time(NULL))` sin semilla fija, pa que dos
+  corridas den tiempos distintos.
+- **tope de 10 000 actividades** (`MAX_ACTIVIDADES`).
+
+## archivos
+
+| Archivo | Que es |
+|---|---|
+| `planificador.c` | el programa completo, un solo archivo |
+| `Makefile` | `all`, `run`, `test`, `clean` |
+| `paso1.c` … `paso10.c` | la construccion paso a paso (con `paso5a` y `paso5b`) |
+| `*.txt` | los planes de prueba |

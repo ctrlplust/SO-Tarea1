@@ -31,7 +31,7 @@
 #define MSG_MAX 128      /* el mensaje que entrega cada actividad */
 #define INSUMO_MAX 4096  /* lo que le pasamos a un hijo: cabe en una pipe sin
                            quedarse esperando a que el otro la vacíe */
-#define DESCRIPTORES_MIN 65536     /* el limite blando que intentsamos poner */
+#define DESCRIPTORES_MIN 65536     /* el límite blando que intentamos poner */
 #define MARGEN 20                  /* pa stdin/stdout/stderr y las pipes del
                                       que se está lanzando */
 
@@ -298,8 +298,9 @@ int main(int argc, char **argv) {
     /* esta vuelta va después de terminar de leer el archivo y no adentro del
        while de fgets, porque una actividad puede depender de otra que
        aparece más abajo: si la buscáramos al leerla, esa de abajo todavía no
-       estaría en la lista */
-    /* strtok va metiendo '\0' en el texto que va partiendo, así que si lo
+       estaría en la lista.
+
+       strtok va metiendo '\0' en el texto que va partiendo, así que si lo
        aplicáramos sobre deps_txt lo dejaría mutilado. por eso partimos una
        copia y deps_txt queda intacto.
        la primera vez se le pasa el texto, y después NULL pa que siga

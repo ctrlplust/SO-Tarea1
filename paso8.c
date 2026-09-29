@@ -7,7 +7,7 @@
 #include <unistd.h>     /* fork, _exit, pipe, read, write, close */
 #include <sys/wait.h>   /* waitpid, WIFEXITED, WEXITSTATUS */
 #include <errno.h>      /* errno */
-#include <signal.h>     /* NUEVO: sigaction, sigsuspend, kill, SIGINT... */
+#include <signal.h>     /* sigaction, sigsuspend, kill, SIGINT... */
 
 #define MAX_ACTIVIDADES 10000
 #define T_MIN 100
@@ -240,7 +240,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    /* ---- NUEVO: preparar las señales ----
+    /* ---- preparar las señales ----
        1) Bloqueamos SIGINT y SIGCHLD. Mientras estén bloqueadas, si llegan
           quedan "pendientes" y no se pierden.
        2) Solo se desbloquean, de forma atómica, dentro de sigsuspend.
@@ -270,7 +270,6 @@ int main(int argc, char **argv) {
     int fallidas = 0;
     int abortadas = 0;
 
-    /* NUEVO: el loop también se corta si llegó Ctrl+C */
     while (oks + fallidas + abortadas < n && !interrumpido) {
 
         /* (a) Lanzar mientras haya listas en la cola y cupo (activos < K) */
@@ -293,10 +292,6 @@ int main(int argc, char **argv) {
 
             if (pid == 0) {
                 /* ---- HIJO ---- */
-
-                /* NUEVO: el hijo ignora Ctrl+C (el terminal se lo manda a
-                   todo el grupo). Solo el padre decide cómo se cierra todo.
-                   Además restauramos la máscara de señales que heredó. */
                 /* el Ctrl+C le llega a todo el grupo de procesos, así que el
                    hijo lo ignora: el corte lo maneja el padre, que va
                    matando uno por uno y así decide el orden */
@@ -438,9 +433,9 @@ int main(int argc, char **argv) {
         }
     }
 
-    /* ---- NUEVO: cierre por Ctrl+C (la Seremi) ----
-       Matamos a los hijos vivos con SIGTERM y hacemos waitpid a cada uno
-       para que no queden zombis. Las que nunca se lanzaron solo se cuentan. */
+    /* ---- cierre por Ctrl+C (la Seremi) ----
+       matamos a los hijos vivos con SIGTERM y hacemos waitpid a cada uno pa
+       que no queden zombis. las que nunca se lanzaron solo se cuentan */
     if (interrumpido) {
         int cortadas = 0;
         int sin_lanzar = 0;

@@ -31,7 +31,6 @@ typedef struct {
 
     pid_t pid;        /* proceso hijo que la ejecuta */
 
-    /* NUEVO */
     int  fd_res;      /* extremo de LECTURA de la pipe por donde el hijo me responde */
     char msg[MSG_MAX];/* mensaje que entregó al terminar */
 } Actividad;
