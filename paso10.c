@@ -6,7 +6,7 @@
 #include <time.h>          /* time, nanosleep, struct timespec */
 #include <unistd.h>        /* fork, _exit, pipe, read, write, close */
 #include <sys/wait.h>      /* waitpid, WIFEXITED, WEXITSTATUS */
-#include <sys/resource.h>  /* NUEVO: getrlimit, setrlimit */
+#include <sys/resource.h>  /* getrlimit, setrlimit, RLIMIT_NOFILE */
 #include <errno.h>         /* errno */
 #include <signal.h>        /* sigaction, sigsuspend, kill, SIGINT... */
 
@@ -124,14 +124,15 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    /* ---- NUEVO: ajustar K al límite de descriptores ----
-       Cada hijo vivo deja 1 descriptor abierto en el padre (la pipe de su
-       resultado). Mientras se lanza uno nuevo se usan 4 más, y además están
-       stdin, stdout y stderr. Por eso dejamos un margen de 20. */
+    /* K contra el límite de descriptores: cada pipe es un descriptor, y el
+       sistema pone un tope (ulimit -n). como el padre guarda una pipe por
+       cada hijo vivo, un K enorme choca con ese tope.
+       primero subimos el límite blando lo que se pueda; si aun así no cabe,
+       bajamos K, que igual sigue cumpliendo "nunca más de K a la vez". */
     struct rlimit lim;
     if (getrlimit(RLIMIT_NOFILE, &lim) == 0) {
 
-        /* 1) Intentamos subir el límite blando (hasta 65536 o el duro). */
+        /* el tope que se puede pedir es el límite duro, nunca más */
         rlim_t deseado = 65536;
         if (lim.rlim_max != RLIM_INFINITY && lim.rlim_max < deseado) {
             deseado = lim.rlim_max;
@@ -142,7 +143,9 @@ int main(int argc, char **argv) {
             getrlimit(RLIMIT_NOFILE, &lim);   /* leemos el valor real */
         }
 
-        /* 2) Si K sigue sin caber, lo bajamos y avisamos. */
+        /* si con el límite nuevo tampoco cabe K, lo bajamos y avisamos.
+           el margen de 20 es pa stdin/stdout/stderr y las pipes del que se
+           está lanzando */
         if (lim.rlim_cur != RLIM_INFINITY) {
             long maximo = (long)lim.rlim_cur - 20;
             if (maximo < 1) maximo = 1;
@@ -190,10 +193,9 @@ int main(int argc, char **argv) {
         snprintf(a->nombre, sizeof(a->nombre), "%s", campos[1]);
         snprintf(a->deps_txt, sizeof(a->deps_txt), "%s", campos[3]);
 
-        /* ---- NUEVO (validación 1): el ID no puede estar repetido ----
-           El ID es la identidad de la actividad: si dos actividades
-           comparten el mismo ID, las dependencias "apuntarían" a la
-           primera y la segunda quedaría imposible de referencia. */
+        /* el ID no puede repetirse: es la identidad de la actividad, y si dos
+           comparten ID las dependencias apuntarían a la primera y la segunda
+           quedaría imposible de referenciar */
         if (buscar(n, a->id) >= 0) {
             printf("Error: ID repetido '%s' (linea %d).\n", a->id, n + 1);
             fclose(f);
@@ -206,15 +208,17 @@ int main(int argc, char **argv) {
             a->falla = 1;
         }
 
-        /* ---- NUEVO (validación 2): el tiempo, si viene, debe ser un número ----
-           atoi() no avisa: ante "abc" devuelve 0 en silencio y la actividad
-           terminaría al instante. Por eso primero lo comprobamos con strtol,
-           que sí nos dice si leyó algo y hasta dónde llegó. */
+        /* el tiempo, si viene escrito, tiene que ser un número. atoi no avisa
+           de nada: ante "abc" devuelve 0 en silencio y la actividad terminaría
+           al instante, así que antes lo comprobamos con strtol, que sí dice
+           hasta dónde leyó */
         if (campos[2][0] != '\0') {
             char *fin_num;
             errno = 0;
             long valor = strtol(campos[2], &fin_num, 10);
 
+            /* fin_num == campos[2] es que no leyó ningún dígito, y
+               *fin_num != '\0' es que después del número había letras */
             if (fin_num == campos[2] || *fin_num != '\0' || errno == ERANGE) {
                 printf("Error: tiempo no numerico '%s' en la actividad '%s'"
                        " (linea %d).\n", campos[2], a->id, n + 1);
@@ -320,7 +324,7 @@ int main(int argc, char **argv) {
     int oks = 0;
     int fallidas = 0;
     int abortadas = 0;
-    int fallo_sistema = 0;   /* NUEVO: 1 si pipe() o fork() fallaron */
+    int fallo_sistema = 0;   /* se prende si pipe() o fork() fallan */
 
     while (oks + fallidas + abortadas < n && !interrumpido && !fallo_sistema) {
 
@@ -329,9 +333,9 @@ int main(int argc, char **argv) {
             int i = cola[ini];
             ini++;
 
-            /* NUEVO: si algo falla, no salimos con return: marcamos el
-               error y salimos del ciclo para que el cierre mate a los
-               hijos vivos y no queden huérfanos. */
+            /* acá no hacemos return: si nos vamos en el medio, los hijos que
+               ya están corriendo quedan sin padre. marcamos nomás la bandera
+               y salimos del ciclo, y el cierre de más abajo los mata */
             int res[2], ent[2];
             if (pipe(res) < 0) {
                 perror("pipe");
@@ -426,7 +430,8 @@ int main(int argc, char **argv) {
             if (activos > max_activos) max_activos = activos;
         }
 
-        /* NUEVO: si el lanzamiento falló, no seguimos esperando */
+        /* si el lanzamiento falló, no tiene sentido quedarse esperando a
+           algún hijo: cortamos el ciclo */
         if (fallo_sistema) {
             break;
         }
@@ -496,8 +501,9 @@ int main(int argc, char **argv) {
         }
     }
 
-    /* ---- Cierre por Ctrl+C (la Seremi) o por error del sistema ----
-       NUEVO: ahora también se usa cuando pipe() o fork() fallaron. */
+    /* cierre por Ctrl+C (la Seremi) o por error del sistema: es el mismo
+       bloque para los dos casos, así que un fallo de pipe o de fork también
+       mata y cosecha a los hijos en vez de dejarlos huérfanos */
     if (interrumpido || fallo_sistema) {
         int cortadas = 0;
         int sin_lanzar = 0;
@@ -514,6 +520,9 @@ int main(int argc, char **argv) {
             }
             if (lista[i].pid > 0) {
                 int estado_hijo;
+                /* SIGTERM primero y recién después el waitpid: si esperáramos
+                   primero, el SIGTERM no se comería nadie y el hijo seguiría
+                   corriendo. así no quedan ni vivos ni zombis */
                 kill(lista[i].pid, SIGTERM);
                 waitpid(lista[i].pid, &estado_hijo, 0);
                 close(lista[i].fd_res);
