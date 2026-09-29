@@ -1,9 +1,9 @@
 # Makefile del planificador de actividades
 
-# -std=gnu17 y no c17: con c17 estricto desaparecen las declaraciones POSIX
-# (fork, pipe, sigaction, nanosleep, sigprocmask).
+# Flags exactos de la pauta: gcc -Wall -Wextra -std=c17 -lpthread
+# (-lpthread se incluye aunque no usemos hilos, para compilar igual que el corrector)
 CC      = gcc
-CFLAGS  = -Wall -Wextra -std=gnu17 -O2
+CFLAGS  = -Wall -Wextra -std=c17 -lpthread -O2
 PROG    = planificador
 
 # Se pueden cambiar al correr:  make run PLAN=estres.txt K=10000

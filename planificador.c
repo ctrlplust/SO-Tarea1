@@ -9,6 +9,12 @@
  * Uso:  ./planificador plan.txt K
  */
 
+/* La pauta compila con -std=c17, que es ISO estricto: en ese modo glibc esconde
+   las declaraciones POSIX (fork, pipe, sigaction, nanosleep, sigprocmask, RLIMIT_NOFILE).
+   Hay que pedirla explicitamente ANTES del primer #include, por eso esta linea
+   va aca y no mas abajo. */
+#define _POSIX_C_SOURCE 200809L
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

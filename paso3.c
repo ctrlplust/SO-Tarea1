@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include <stdio.h>    /* printf, fopen, fgets, snprintf */
 #include <stdlib.h>   /* atoi, rand, srand */
 #include <string.h>   /* strchr, strlen, memmove */

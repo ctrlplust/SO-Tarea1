@@ -14,12 +14,21 @@ make
 Genera `./planificador`. Equivale a:
 
 ```sh
-gcc -Wall -Wextra -std=gnu17 -O2 -o planificador planificador.c
+gcc -Wall -Wextra -std=c17 -lpthread -o planificador planificador.c
 ```
 
-`make` usa `-std=gnu17` y no `-std=c17` a propósito: en modo ISO estricto
-`c17` desaparecen las declaraciones POSIX (`fork`, `pipe`, `sigaction`,
-`sigprocmask`, `nanosleep`) y el archivo no compila.
+Son los flags que pide la pauta, y compila sin un solo warning. Para que
+funcione con `-std=c17` (que es ISO estricto) el archivo empieza con:
+
+```c
+#define _POSIX_C_SOURCE 200809L
+```
+
+Sin esa línea, que tiene que ir **antes del primer `#include`**, glibc esconde
+las declaraciones POSIX y el archivo no compila: dan errores del tipo
+`unknown type name 'sigset_t'` o `implicit declaration of function 'fork'`.
+`-lpthread` va en el comando porque lo pide la pauta, aunque el programa no usa
+hilos: usa procesos.
 
 ## Ejecutar
 
