@@ -521,8 +521,9 @@ int main(int argc, char **argv) {
             if (lista[i].pid > 0) {
                 int estado_hijo;
                 /* SIGTERM primero y recién después el waitpid: si esperáramos
-                   primero, el SIGTERM no se comería nadie y el hijo seguiría
-                   corriendo. así no quedan ni vivos ni zombis */
+                   primero, nos quedaríamos esperando a que el hijo termine
+                   solo. así el hijo muere y lo cosechamos, y no quedan ni
+                   vivos ni zombis */
                 kill(lista[i].pid, SIGTERM);
                 waitpid(lista[i].pid, &estado_hijo, 0);
                 close(lista[i].fd_res);

@@ -69,7 +69,7 @@ int buscar(int n, const char *id) {
 }
 
 /* marca como ABORTADAS todas las que dependen, directo o indirectamente, de
-   "origen", que acaba de fallar. vaguardando en la pila a medida que avanza,
+   "origen", que acaba de fallar. va guardando en la pila a medida que avanza,
    pa no tener que usar recursion. devuelve cuántas abortó */
 int abortar_descendientes(int origen, int *pila) {
     int tope = 0;

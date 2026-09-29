@@ -110,8 +110,8 @@ int main(int argc, char **argv) {
 
     /* linea ya no tiene nada que ver con los datos, así que mostrar la lista
        al final es la prueba de que los campos quedaron copiados.
-       ojo: a sigue apuntando a la última actividad, por eso acá va
-       lista[i].id y no a->id */
+       ojo: a solo existe adentro del while, por eso acá va lista[i].id y
+       no a->id */
     printf("Actividades leidas: %d\n\n", n);
     for (int i = 0; i < n; i++) {
         printf("[%d] id=%s nombre=%s tiempo=%d ms%s deps=[%s]\n",

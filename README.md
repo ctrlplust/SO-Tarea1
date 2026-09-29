@@ -286,9 +286,10 @@ que el algoritmo de Kahn y el `fork` son dos cosas distintas.
   antes, que si dice hasta donde leyo.
 - **`waitpid` con `sigsuspend`** en vez de polling: el padre bloquea `SIGINT` y
   `SIGCHLD` y duerme con `sigsuspend`, que solo vuelve cuando llega alguna de las
-  dos. asi no se pierde ninguna señal y no hay busy loop. con `waitpid` bloqueado
-  sin `WNOHANG` el padre se quedaria esperando solo por el primer hijo, y el
-  Ctrl+C no se veria hasta que terminara.
+  dos. asi no se pierde ninguna señal y no hay busy loop. con un waitpid
+  bloqueante habria una carrera: si el Ctrl+C llega justo despues de revisar
+  la bandera y antes de entrar a waitpid, el padre se duerme igual y no se
+  entera hasta que termine un hijo.
 - **dos pipes por actividad**: una pipe va en un solo sentido, asi que el
   resultado (hijo -> padre) y los insumos (padre -> hijo) van por canales
   separados. con una sola se mezclarian los buffers.

@@ -302,7 +302,8 @@ int main(int argc, char **argv) {
 
         /* (c) esperamos a UN hijo, el que termine primero. el 0 del final dice
                "duerme hasta que pase algo" y el -1 "cualquiera de mis hijos".
-               una vez por vuelta pa liberar el cupo y avisar a los sucesores */
+               lo llamamos una vez por vuelta pa liberar el cupo y avisar a los
+               sucesores */
         int estado;
         pid_t fin_pid = waitpid(-1, &estado, 0);
         if (fin_pid < 0) {

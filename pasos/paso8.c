@@ -49,8 +49,9 @@ static Actividad lista[MAX_ACTIVIDADES];
 static volatile sig_atomic_t interrumpido = 0;
 
 /* el manejador de SIGINT solo levanta la bandera y nada más: adentro de un
-   manejador no se pueden llamar funciones de la biblioteca (printf y las
-   señales se interrupts entre sí), lo único seguro es dejar una bandera */
+   manejador solo se pueden llamar funciones seguras para
+   señales (printf no lo es), así que lo único que hacemos es dejar
+   una bandera */
 void manejar_sigint(int s) {
     (void)s;
     interrumpido = 1;
@@ -367,12 +368,13 @@ int main(int argc, char **argv) {
         }
 
         /* (c) esperamos a un hijo o a Ctrl+C durmiendo de verdad: WNOHANG
-               solo pregunta "¿terminó alguno?" sin parar el proceso, y si
-               la respuesta es que no, sigsuspend nos duerme (0% de CPU)
-               dándole las señales al mismo instante. si waited estuviera
-               bloqueado sin WNOHANG, el proceso se quedaría esperando solo
-               por el primer hijo y el Ctrl+C no se vería hasta que
-               terminara. */
+               solo pregunta "¿terminó alguno?" sin parar el proceso, y si la
+               respuesta es que no, sigsuspend nos duerme (0% de CPU) y
+               desbloquea las señales en el mismo instante.
+               un waitpid bloqueante tendría una carrera: si el Ctrl+C llega
+               justo después de mirar "interrumpido" y antes de entrar al
+               waitpid, el padre se duerme igual y no se entera hasta que
+               termine algún hijo */
         int st;
         pid_t fin_pid;
         while ((fin_pid = waitpid(-1, &st, WNOHANG)) == 0) {

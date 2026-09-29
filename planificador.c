@@ -79,8 +79,9 @@ static Actividad lista[MAX_ACTIVIDADES];
 static volatile sig_atomic_t interrumpido = 0;
 
 /* el manejador de SIGINT solo levanta la bandera y nada más: adentro de un
-   manejador no se pueden llamar funciones de la biblioteca (printf y las
-   señales se interrumpen entre sí), lo único seguro es dejar una bandera */
+   manejador solo se pueden llamar funciones seguras para
+   señales (printf no lo es), así que lo único que hacemos es dejar
+   una bandera */
 void manejar_sigint(int s) {
     (void)s;
     interrumpido = 1;
@@ -558,10 +559,12 @@ int main(int argc, char **argv) {
 
         /* (c) esperamos a un hijo o a Ctrl+C durmiendo de verdad: WNOHANG
                solo pregunta "¿terminó alguno?" sin parar el proceso, y si la
-               respuesta es que no, sigsuspend nos duerme (0% de CPU)
-               dándole las señales al mismo instante. si waited estuviera
-               bloqueado sin WNOHANG, el proceso se quedaría esperando solo
-               por el primer hijo y el Ctrl+C no se vería hasta que terminara */
+               respuesta es que no, sigsuspend nos duerme (0% de CPU) y
+               desbloquea las señales en el mismo instante.
+               un waitpid bloqueante tendría una carrera: si el Ctrl+C llega
+               justo después de mirar "interrumpido" y antes de entrar al
+               waitpid, el padre se duerme igual y no se entera hasta que
+               termine algún hijo */
         int st;
         pid_t fin_pid;
         while ((fin_pid = waitpid(-1, &st, WNOHANG)) == 0) {
@@ -635,7 +638,8 @@ int main(int argc, char **argv) {
     /* cierre por Ctrl+C (la Seremi) o por error del sistema: es el mismo
        bloque para los dos casos, así que un fallo de pipe o de fork también
        mata y cosecha a los hijos en vez de dejarlos huérfanos.
-       acá no se hace return a mitad de la ejecución */
+       por eso durante el lanzamiento no hacemos return, y el flujo llega
+       hasta acá */
     if (interrumpido || fallo_sistema) {
         int cortadas = 0;
         int sin_lanzar = 0;
@@ -653,8 +657,9 @@ int main(int argc, char **argv) {
             if (lista[i].pid > 0) {   /* fue lanzada y sigue viva */
                 int estado_hijo;
                 /* SIGTERM primero y recién después el waitpid: si esperáramos
-                   primero, el SIGTERM no se comería nadie y el hijo seguiría
-                   corriendo. así no quedan ni vivos ni zombis */
+                   primero, nos quedaríamos esperando a que el hijo termine
+                   solo. así el hijo muere y lo cosechamos, y no quedan ni
+                   vivos ni zombis */
                 kill(lista[i].pid, SIGTERM);
                 waitpid(lista[i].pid, &estado_hijo, 0);
                 close(lista[i].fd_res);
