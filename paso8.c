@@ -44,19 +44,21 @@ typedef struct {
 
 static Actividad lista[MAX_ACTIVIDADES];
 
-/* NUEVO: bandera que levanta el handler de Ctrl+C.
-   volatile sig_atomic_t es el único tipo que se puede tocar con
-   seguridad desde un handler. */
+/* la bandera del corte. volatile sig_atomic_t es lo único que se puede
+   tocar con seguridad desde un manejador de señal */
 static volatile sig_atomic_t interrumpido = 0;
 
-/* NUEVO: el handler de SIGINT SOLO levanta la bandera. */
+/* el manejador de SIGINT solo levanta la bandera y nada más: adentro de un
+   manejador no se pueden llamar funciones de la biblioteca (printf y las
+   señales se interrupts entre sí), lo único seguro es dejar una bandera */
 void manejar_sigint(int s) {
     (void)s;
     interrumpido = 1;
 }
 
-/* NUEVO: no hace nada. Existe solo para que SIGCHLD (un hijo terminó)
-   despierte a sigsuspend. */
+/* este no hace nada: existe para que cuando un hijo termina y llegue SIGCHLD,
+   el proceso se despierte del sigsuspend aunque no haya que hacer nada con
+   esa señal en sí */
 void manejar_sigchld(int s) {
     (void)s;
 }
@@ -247,11 +249,14 @@ int main(int argc, char **argv) {
     sigemptyset(&bloqueadas);
     sigaddset(&bloqueadas, SIGINT);
     sigaddset(&bloqueadas, SIGCHLD);
-    sigprocmask(SIG_BLOCK, &bloqueadas, &viejas);   /* viejas = máscara original */
+    sigprocmask(SIG_BLOCK, &bloqueadas, &viejas);   /* viejas = la máscara que
+                                                       tenía el proceso */
 
     struct sigaction sa;
     memset(&sa, 0, sizeof(sa));
     sigemptyset(&sa.sa_mask);
+    /* sa_flags en 0 y no SA_RESTART, pa que una llamada interrumpida no se
+       reanude sola por debajo */
     sa.sa_flags = 0;
     sa.sa_handler = manejar_sigint;
     sigaction(SIGINT, &sa, NULL);
@@ -292,6 +297,9 @@ int main(int argc, char **argv) {
                 /* NUEVO: el hijo ignora Ctrl+C (el terminal se lo manda a
                    todo el grupo). Solo el padre decide cómo se cierra todo.
                    Además restauramos la máscara de señales que heredó. */
+                /* el Ctrl+C le llega a todo el grupo de procesos, así que el
+                   hijo lo ignora: el corte lo maneja el padre, que va
+                   matando uno por uno y así decide el orden */
                 signal(SIGINT, SIG_IGN);
                 signal(SIGCHLD, SIG_DFL);
                 sigprocmask(SIG_SETMASK, &viejas, NULL);
@@ -363,19 +371,21 @@ int main(int argc, char **argv) {
             break;
         }
 
-        /* (c) NUEVO: esperar a un hijo o a Ctrl+C, DURMIENDO y sin perder
-               ninguna señal.
-               waitpid con WNOHANG solo pregunta "¿ya terminó alguno?".
-               Si no, sigsuspend duerme el proceso (0% CPU) y desbloquea
-               SIGINT/SIGCHLD en el mismo instante, así que no hay ventana
-               en la que se pueda perder el aviso. */
+        /* (c) esperamos a un hijo o a Ctrl+C durmiendo de verdad: WNOHANG
+               solo pregunta "¿terminó alguno?" sin parar el proceso, y si
+               la respuesta es que no, sigsuspend nos duerme (0% de CPU)
+               dándole las señales al mismo instante. si waited estuviera
+               bloqueado sin WNOHANG, el proceso se quedaría esperando solo
+               por el primer hijo y el Ctrl+C no se vería hasta que
+               terminara. */
         int st;
         pid_t fin_pid;
         while ((fin_pid = waitpid(-1, &st, WNOHANG)) == 0) {
             if (interrumpido) {
                 break;
             }
-            sigsuspend(&viejas);
+            sigsuspend(&viejas);   /* acá vuelve el proceso, y con él la
+                                       señal que estaba pendiente */
         }
         if (interrumpido) {
             break;

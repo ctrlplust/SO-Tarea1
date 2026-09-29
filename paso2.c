@@ -1,25 +1,23 @@
 #include <stdio.h>
 #include <string.h>
 
-/* s es un puntero al texto: se limpia en el mismo lugar y no devuelve nada,
-   el que llama ya ve el texto sin espacios.
+/* no devuelve nada: se limpia en el mismo lugar, asi que el que llama ya
+   ve el texto sin espacios.
    ejemplo: " asar_longaniza \n"  ->  "asar_longaniza" */
 void recortar(char *s) {
 
-    /* 1) ini se va saltando los espacios del principio hasta topar con el
-          primer caracter de verdad */
     char *ini = s;
     while (*ini == ' ' || *ini == '\t' || *ini == '\n' || *ini == '\r') {
         ini++;
     }
 
-    /* 2) corremos el texto de verdad sobre los espacios de la izquierda.
-          el +1 es pa que corra tambien el '\0' del final, y memmove en vez
-          de memcpy porque origen y destino son el mismo arreglo */
+    /* corremos el texto de verdad sobre los espacios de la izquierda.
+       el +1 es pa que corra tambien el '\0' del final, y memmove en vez de
+       memcpy porque origen y destino son el mismo arreglo */
     memmove(s, ini, strlen(ini) + 1);
 
-    /* 3) desde el ultimo caracter de vuelta, cambiamos los espacios y el
-          '\n' por '\0' hasta topar con texto de verdad */
+    /* desde el ultimo caracter de vuelta, cada espacio se cambia por '\0'
+       hasta topar con texto de verdad */
     int len = strlen(s);
     while (len > 0 && (s[len - 1] == ' ' || s[len - 1] == '\t' ||
                        s[len - 1] == '\n' || s[len - 1] == '\r')) {
@@ -48,9 +46,8 @@ int main(int argc, char **argv) {
     char linea[4096];
     while (fgets(linea, sizeof(linea), f) != NULL) {
 
-        /* campos es un arreglo de 4 punteros: ID, nombre, tiempo y deps.
-           arrancan apuntando a "" pa que, si la linea trae menos campos,
-           no queden apuntando a basura */
+        /* los 4 punteros van a apuntar dentro de linea; los que no alcancen
+           a llenarse quedan en vacio */
         char *campos[4] = { vacio, vacio, vacio, vacio };
 
         /* p es un dedo que va pasando campo por campo. strchr busca el ':'
@@ -68,7 +65,6 @@ int main(int argc, char **argv) {
             p = dos_puntos + 1;
         }
 
-        /* los campos salieron con espacios pegados, los limpiamos */
         for (int i = 0; i < 4; i++) {
             recortar(campos[i]);
         }

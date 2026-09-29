@@ -39,6 +39,9 @@ void recortar(char *s) {
 
 /* NUEVO: busca un ID en la lista.
    Devuelve la posición donde está, o -1 si no existe. */
+/* recorre la lista comparando el id con strcmp y devuelve la posición en la
+   que está, o -1 si no aparece. necesitamos la posición y no el id porque
+   después vamos a leer lista[j] directo */
 int buscar(int n, const char *id) {
     for (int i = 0; i < n; i++) {
         if (strcmp(lista[i].id, id) == 0) {
@@ -96,6 +99,9 @@ int main(int argc, char **argv) {
         snprintf(a->nombre, sizeof(a->nombre), "%s", campos[1]);
         snprintf(a->deps_txt, sizeof(a->deps_txt), "%s", campos[3]);
 
+        /* si el tiempo vino vacío lo sorteamos entre 100 y 5000 ms: el +1 es
+           pa que el rango incluya al 5000, sin él sería hasta 4999.
+           si vino escrito, atoi lo pasa de texto a número */
         if (campos[2][0] == '\0') {
             a->tiempo_ms = T_MIN + rand() % (T_MAX - T_MIN + 1);
             a->aleatorio = 1;
@@ -119,6 +125,11 @@ int main(int argc, char **argv) {
 
         /* strtok corta "copia" en pedazos separados por comas.
            La 1ª vez se le pasa el texto; las siguientes, NULL. */
+        /* strtok va metiendo '\0' en el texto que va partiendo, así que si lo
+           aplicáramos sobre deps_txt lo dejaría mutilado. por eso partimos una
+           copia y deps_txt queda intacto.
+           la primera vez se le pasa el texto, y después NULL pa que siga
+           partiendo el mismo en vez de arrancar uno nuevo */
         char *dep = strtok(copia, ",");
         while (dep != NULL) {
             recortar(dep);   /* " 2" -> "2" */
@@ -132,6 +143,10 @@ int main(int argc, char **argv) {
                 }
 
                 /* agrandar el arreglo deps en 1 casilla y guardar j */
+                /* no sabemos de antemano cuántas dependencias trae la línea,
+                   así que el arreglo se agranda de a una. realloc devuelve el
+                   mismo puntero con el lugar nuevo (puede moverlo a otra
+                   dirección), y por eso hay que guardárselo de vuelta */
                 lista[i].deps = realloc(lista[i].deps,
                                         sizeof(int) * (lista[i].ndeps + 1));
                 lista[i].deps[lista[i].ndeps] = j;
@@ -139,6 +154,8 @@ int main(int argc, char **argv) {
             }
             dep = strtok(NULL, ",");
         }
+        /* pendientes parte igual a ndeps y baja de a 1 cada vez que termina
+           una de las que depende, pa saber cuándo puede empezar */
         lista[i].pendientes = lista[i].ndeps;
     }
 
@@ -157,6 +174,7 @@ int main(int argc, char **argv) {
     }
 
     /* Liberar la memoria pedida con realloc */
+    /* lo que se agrandó con realloc hay que devolverlo */
     for (int i = 0; i < n; i++) {
         free(lista[i].deps);
     }

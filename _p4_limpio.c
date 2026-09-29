@@ -14,13 +14,9 @@ typedef struct {
     int  aleatorio;
     char deps_txt[512];
 
-    int *deps;        /* posiciones de las actividades de las que depende */
+    int *deps;
     int  ndeps;
-    int  pendientes;  /* cuántas le faltan por terminar */
-
-    /* lo contrario de deps: quiénes dependen de esta */
-    int *sucs;
-    int  nsucs;
+    int  pendientes;
 } Actividad;
 
 static Actividad lista[MAX_ACTIVIDADES];
@@ -49,9 +45,6 @@ int buscar(int n, const char *id) {
     return -1;
 }
 
-/* "" a secas es un texto en memoria de solo lectura, y recortar() escribe
-   sobre el, asi que acá usamos una copia que sí se puede modificar.
-   sirve para las líneas que traen menos de 4 campos */
 static char vacio[] = "";
 
 int main(int argc, char **argv) {
@@ -71,11 +64,11 @@ int main(int argc, char **argv) {
     char linea[4096];
     int n = 0;
 
-    /* ---- PASADA 1: leer líneas (igual que el paso 4) ---- */
     while (fgets(linea, sizeof(linea), f) != NULL) {
         if (n >= MAX_ACTIVIDADES) {
             break;
         }
+
         char *campos[4] = { vacio, vacio, vacio, vacio };
         char *p = linea;
         for (int i = 0; i < 4; i++) {
@@ -107,14 +100,15 @@ int main(int argc, char **argv) {
     }
     fclose(f);
 
-    /* ---- PASADA 2: "1, 2" -> posiciones (igual que el paso 4) ---- */
     for (int i = 0; i < n; i++) {
+
         char copia[512];
         snprintf(copia, sizeof(copia), "%s", lista[i].deps_txt);
 
         char *dep = strtok(copia, ",");
         while (dep != NULL) {
             recortar(dep);
+
             if (dep[0] != '\0') {
                 int j = buscar(n, dep);
                 if (j < 0) {
@@ -122,6 +116,7 @@ int main(int argc, char **argv) {
                            lista[i].id, dep);
                     return 1;
                 }
+
                 lista[i].deps = realloc(lista[i].deps,
                                         sizeof(int) * (lista[i].ndeps + 1));
                 lista[i].deps[lista[i].ndeps] = j;
@@ -132,81 +127,21 @@ int main(int argc, char **argv) {
         lista[i].pendientes = lista[i].ndeps;
     }
 
-    /* lista de sucesores: si i depende de j, entonces i es sucesor de j.
-       la hacemos al revés de deps pa no tener que recorrer las 10000
-       actividades cada vez que una termina: así vamos directo a las que
-       estaban esperando a esa */
+    printf("Actividades leidas: %d\n\n", n);
     for (int i = 0; i < n; i++) {
+        printf("[%d] id=%s nombre=%s tiempo=%d ms%s pend=%d\n",
+               i, lista[i].id, lista[i].nombre, lista[i].tiempo_ms,
+               lista[i].aleatorio ? " (aleatorio)" : "",
+               lista[i].pendientes);
+        printf("     depende de posiciones:");
         for (int k = 0; k < lista[i].ndeps; k++) {
-            int j = lista[i].deps[k];
-            lista[j].nsucs++;
+            printf(" %d(id %s)", lista[i].deps[k], lista[lista[i].deps[k]].id);
         }
-    }
-    /* primero contamos cuántos sucesores tiene cada una, pa saber cuánta
-       memoria hay que reservar */
-    for (int j = 0; j < n; j++) {
-        if (lista[j].nsucs > 0) {
-            lista[j].sucs = malloc(sizeof(int) * lista[j].nsucs);
-        }
-        lista[j].nsucs = 0;   /* ahora pasa a ser el índice del próximo hueco */
-    }
-    /* y por último los llenamos */
-    for (int i = 0; i < n; i++) {
-        for (int k = 0; k < lista[i].ndeps; k++) {
-            int j = lista[i].deps[k];
-            lista[j].sucs[lista[j].nsucs] = i;
-            lista[j].nsucs++;
-        }
+        printf("\n");
     }
 
-    /* simulación del orden de ejecución (Kahn): todavía no hay procesos,
-       esto solo va diciendo en qué orden se podrían ir haciendo */
-    int *cola = malloc(sizeof(int) * n);
-    int ini = 0, fin = 0;   /* la cola va de cola[ini] hasta cola[fin-1] */
-
-    /* entran a la cola las que no esperan a nadie */
-    for (int i = 0; i < n; i++) {
-        if (lista[i].pendientes == 0) {
-            cola[fin] = i;
-            fin++;
-        }
-    }
-
-    /* mientras haya alguien en la cola: sacamos el primero (FIFO, como una
-       fila), lo "ejecutamos" y le avisamos a sus sucesores */
-    int ejecutadas = 0;
-    while (ini < fin) {
-        int i = cola[ini];
-        ini++;
-
-        printf("Ejecuto [%s] %s (%d ms)\n",
-               lista[i].id, lista[i].nombre, lista[i].tiempo_ms);
-        ejecutadas++;
-
-        for (int k = 0; k < lista[i].nsucs; k++) {
-            int s = lista[i].sucs[k];
-            /* le queda una dependencia menos, y cuando llega a 0 ya puede
-               arrancar, así que entra a la cola */
-            lista[s].pendientes--;
-            if (lista[s].pendientes == 0) {
-                cola[fin] = s;
-                fin++;
-            }
-        }
-    }
-
-    /* si la cola se vació y quedaron actividades sin ejecutar, es que alguna
-       se quedó esperando para siempre: hay un ciclo en el grafo */
-    if (ejecutadas < n) {
-        printf("Error: el plan tiene un ciclo (%d de %d actividades ejecutables).\n",
-               ejecutadas, n);
-    }
-
-    /* Liberar memoria */
-    free(cola);
     for (int i = 0; i < n; i++) {
         free(lista[i].deps);
-        free(lista[i].sucs);
     }
-    return ejecutadas < n ? 1 : 0;
+    return 0;
 }

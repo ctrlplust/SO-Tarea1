@@ -11,8 +11,9 @@
 #define MAX_ACTIVIDADES 10000
 #define T_MIN 100
 #define T_MAX 5000
-#define MSG_MAX 128      /* NUEVO: tamaño del mensaje que entrega cada actividad */
-#define INSUMO_MAX 4096  /* NUEVO: máximo que le pasamos a un hijo (cabe en una pipe sin bloquear) */
+#define MSG_MAX 128      /* el mensaje que entrega cada actividad */
+#define INSUMO_MAX 4096  /* lo que le pasamos a un hijo: cabe en una pipe sin
+                           quedarse esperando a que el otro la vacíe */
 
 typedef struct {
     char id[64];
@@ -181,30 +182,35 @@ int main(int argc, char **argv) {
         }
     }
 
-    /* ---- Scheduler ---- */
-    int activos = 0;
-    int ejecutadas = 0;
-    int max_activos = 0;
+    /* el padre es el único que decide: él lleva la cuenta de cuántos hijos
+       tiene vivos y los va lanzando hasta el tope de K */
+    int activos = 0;        /* hijos vivos ahora mismo */
+    int ejecutadas = 0;     /* terminadas */
+    int max_activos = 0;    /* el pico, pa poder mostrar que nunca pasamos de K */
 
     while (ejecutadas < n) {
 
-        /* (a) Lanzar mientras haya listas en la cola y cupo (activos < K) */
+        /* (a) lanzar mientras haya en la cola y cupo (activos < K) */
         while (ini < fin && activos < K) {
             int i = cola[ini];
             ini++;
 
-            /* NUEVO: dos pipes para esta actividad.
-               res[0]/res[1]: hijo -> padre (su resultado)
-               ent[0]/ent[1]: padre -> hijo (los mensajes de sus insumos)
-               En cada pipe, [0] es para LEER y [1] para ESCRIBIR. */
+            /* dos pipes por actividad, porque una pipe va en un solo
+               sentido: res es del hijo al padre (su resultado) y ent del
+               padre al hijo (los mensajes de sus insumos).
+               en cada una, [0] es el extremo de lectura y [1] el de escritura */
             int res[2], ent[2];
             if (pipe(res) < 0 || pipe(ent) < 0) {
                 perror("pipe");
                 return 1;
             }
 
+            /* stdout tiene un buffer en memoria: si lo dejamos con cosas
+               pendientes, el hijo hereda una copia y vuelve a imprimirlas.
+               con fflush queda vacío antes de clonar */
             fflush(stdout);
-            pid_t pid = fork();
+            pid_t pid = fork();     /* devuelve 0 en el hijo y el pid del hijo
+                                       en el padre: el if de abajo los separa */
             if (pid < 0) {
                 perror("fork");
                 return 1;
@@ -212,10 +218,15 @@ int main(int argc, char **argv) {
 
             if (pid == 0) {
                 /* ---- HIJO ---- */
-                close(res[0]);   /* el hijo no lee su resultado */
-                close(ent[1]);   /* el hijo no escribe sus insumos */
+                /* cerramos los extremos que no usamos, pa no andar dejando
+                   descriptores abiertos: con 10000 actividades cada uno que
+                   sobra se nota */
+                close(res[0]);
+                close(ent[1]);
 
-                /* NUEVO: leer los mensajes que dejó el padre */
+                /* leemos los insumos que dejó el padre. el -1 en el sizeof
+                   deja un byte libre pa el '\0', porque la pipe manda los
+                   bytes crudos y no pone el fin de texto */
                 char recibido[INSUMO_MAX];
                 ssize_t r = read(ent[0], recibido, sizeof(recibido) - 1);
                 if (r < 0) r = 0;
@@ -231,22 +242,25 @@ int main(int argc, char **argv) {
                 espera.tv_nsec = (lista[i].tiempo_ms % 1000) * 1000000L;
                 nanosleep(&espera, NULL);
 
-                /* NUEVO: mandar el resultado al padre y terminar */
+                /* el resultado se va por la otra pipe */
                 char salida[MSG_MAX];
                 int largo = snprintf(salida, sizeof(salida), "%s listo", lista[i].nombre);
                 if (write(res[1], salida, largo) < 0) {
                     perror("write hijo");
                 }
                 close(res[1]);
+                /* _exit y no return: con return el seguiría con el resto de
+                   main y el planificador se clonaría entero. además _exit no
+                   vacía el buffer de stdout, así que el hijo no repite nada */
                 _exit(0);
             }
 
             /* ---- PADRE ---- */
-            close(res[1]);   /* el padre no escribe el resultado */
-            close(ent[0]);   /* el padre no lee los insumos */
+            close(res[1]);
+            close(ent[0]);
 
-            /* NUEVO: armar el texto de insumos con los mensajes de las
-               dependencias y dejarlo en la pipe de entrada del hijo. */
+            /* armamos el texto con los mensajes de las dependencias de esta
+               actividad, que son los que ya guardamos en msg */
             char insumo[INSUMO_MAX];
             int len = 0;
             insumo[0] = '\0';
@@ -255,7 +269,9 @@ int main(int argc, char **argv) {
                 int w = snprintf(insumo + len, sizeof(insumo) - len,
                                  "%s(%s): %s; ", lista[d].id, lista[d].nombre, lista[d].msg);
                 if (w < 0 || len + w >= (int)sizeof(insumo)) {
-                    len = sizeof(insumo) - 1;   /* se llenó: cortamos aquí */
+                    /* se llenó el arreglo: cortamos acá, porque si seguíamos
+                       escribiríamos pasado el final */
+                    len = sizeof(insumo) - 1;
                     break;
                 }
                 len += w;
@@ -263,23 +279,36 @@ int main(int argc, char **argv) {
             if (write(ent[1], insumo, len) < 0) {
                 perror("write padre");
             }
-            close(ent[1]);   /* cerrar avisa "no viene más" */
+            /* cerrar el extremo de escritura es lo que le avisa al hijo que
+               no viene nada más: su read devuelve 0 y sigue con su trabajo */
+            close(ent[1]);
 
             lista[i].pid = pid;
-            lista[i].fd_res = res[0];   /* lo guardamos para leer cuando termine */
+            /* guardamos el extremo de lectura pa leer el mensaje más adelante.
+               leerlo acá nos dejaría esperando a que el hijo termine, y el
+               plan correría de a uno */
+            lista[i].fd_res = res[0];
+            /* el contador sube solo en el padre: la memoria del hijo es una
+               copia y se pierde con el _exit, y el que lleva la cuenta de los
+               cupos es el padre */
             activos++;
             if (activos > max_activos) max_activos = activos;
         }
 
-        /* (b) Nadie corriendo y nada por lanzar: lo que falta es un ciclo */
+        /* (b) si no hay nadie corriendo y no queda nada por lanzar, nadie va a
+               liberar un cupo: lo que falta es inalcanzable, hay un ciclo */
         if (activos == 0) {
             break;
         }
 
-        /* (c) Esperar A UN hijo, durmiendo (sin busy-waiting). */
+        /* (c) esperamos a UN hijo, el que termine primero. el 0 del final dice
+               "dormime hasta que pase algo" y el -1 "cualquiera de mis hijos".
+               una vez por vuelta pa liberar el cupo y avisar a los sucesores */
         int estado;
         pid_t fin_pid = waitpid(-1, &estado, 0);
         if (fin_pid < 0) {
+            /* EINTR: se interrumpió una llamada al sistema porque llegó una
+               señal. no es un fallo del sistema, así que seguimos */
             if (errno == EINTR) continue;
             perror("waitpid");
             break;
@@ -287,11 +316,12 @@ int main(int argc, char **argv) {
         activos--;
         ejecutadas++;
 
-        /* (d) Buscar cuál era, leer su mensaje y avisar a sus sucesores */
+        /* (d) buscamos cuál de las nuestras era comparando los pids */
         for (int i = 0; i < n; i++) {
             if (lista[i].pid == fin_pid) {
 
-                /* NUEVO: leer lo que el hijo dejó en la pipe y cerrarla */
+                /* leemos lo que dejó el hijo. el '\0' va a mano, porque la
+                   pipe no lo manda y sin él el %s del printf se pasa de largo */
                 ssize_t r = read(lista[i].fd_res, lista[i].msg, sizeof(lista[i].msg) - 1);
                 if (r < 0) r = 0;
                 lista[i].msg[r] = '\0';
@@ -320,6 +350,7 @@ int main(int argc, char **argv) {
                ejecutadas, n);
     }
 
+    /* lo que se agrandó con realloc hay que devolverlo */
     free(cola);
     for (int i = 0; i < n; i++) {
         free(lista[i].deps);

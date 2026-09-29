@@ -14,11 +14,11 @@
 #define MSG_MAX 128
 #define INSUMO_MAX 4096
 
-/* NUEVO: estados de una actividad */
-#define EST_PEND     0   /* todavía no termina (esperando o corriendo) */
+/* los cuatro estados posibles de una actividad */
+#define EST_PEND     0   /* todavía no termina: esperando o corriendo */
 #define EST_OK       1   /* terminó bien */
 #define EST_FALLIDA  2   /* terminó con error */
-#define EST_ABORTADA 3   /* nunca se lanzó porque un ancestro falló */
+#define EST_ABORTADA 3   /* nunca corrió porque un ancestro falló */
 
 typedef struct {
     char id[64];
@@ -39,7 +39,7 @@ typedef struct {
     char msg[MSG_MAX];
 
     /* NUEVO */
-    int  falla;       /* 1 si el nombre empezaba con '!' (fallo simulado) */
+    int  falla;       /* 1 si el nombre venía con '!': fallo a propósito */
     int  estado;      /* EST_PEND / EST_OK / EST_FALLIDA / EST_ABORTADA */
 } Actividad;
 
@@ -69,10 +69,9 @@ int buscar(int n, const char *id) {
     return -1;
 }
 
-/* NUEVO: marca como ABORTADAS a todas las que dependen (directa o
-   indirectamente) de "origen", que acaba de fallar.
-   Usa una pila para recorrer el grafo hacia adelante.
-   Devuelve cuántas abortó. "pila" es un arreglo de n casillas. */
+/* marca como ABORTADAS todas las que dependen, directo o indirectamente, de
+   "origen", que acaba de fallar. vaguardando en la pila a medida que avanza,
+   pa no tener que usar recursion. devuelve cuántas abortó */
 int abortar_descendientes(int origen, int *pila) {
     int tope = 0;
     int total = 0;
@@ -86,7 +85,8 @@ int abortar_descendientes(int origen, int *pila) {
 
         for (int k = 0; k < lista[x].nsucs; k++) {
             int s = lista[x].sucs[k];
-            /* solo las que siguen pendientes; así no se cuenta dos veces */
+            /* solo las que siguen pendientes, pa no marcar dos veces la
+               misma ni pisar una que ya terminó bien */
             if (lista[s].estado == EST_PEND) {
                 lista[s].estado = EST_ABORTADA;
                 printf("Aborto [%s] %s (depende de una actividad fallida)\n",
@@ -280,6 +280,7 @@ int main(int argc, char **argv) {
 
                 /* NUEVO: fallo simulado. Termina con código 1 y sin
                    mandar mensaje. */
+                /* el '!' en el nombre marca que esta actividad falla */
                 if (lista[i].falla) {
                     printf("  [%s] %s: FALLO\n", lista[i].id, lista[i].nombre);
                     fflush(stdout);
@@ -346,6 +347,9 @@ int main(int argc, char **argv) {
             }
 
             /* NUEVO: ¿terminó bien? = salió normalmente con código 0 */
+            /* waitpid nos deja el motivo de terminación en st: WIFEXITED
+               pregunta si el hijo salió por su cuenta y WEXITSTATUS saca el
+               código con el que terminó (el hijo usa _exit(1) al fallar) */
             int bien = WIFEXITED(st) && WEXITSTATUS(st) == 0;
 
             if (bien) {

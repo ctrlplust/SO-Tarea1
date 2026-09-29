@@ -246,8 +246,8 @@ y para depurar por partes; para entregar basta `planificador.c`.
 | `paso2.c` | parte cada línea por `:` en 4 campos, con `recortar` |
 | `paso3.c` | estructura `Actividad` y arreglo `lista` |
 | `paso4.c` | traduce las dependencias de texto a posiciones |
-| `paso5a.c` | `fork` respetando el límite K (sin dormir todavía) |
-| `paso5b.c` | la simulación: `nanosleep` del tiempo de cada actividad |
+| `paso5a.c` | lista de sucesores y orden de ejecución (Kahn) simulado, sin procesos todavía |
+| `paso5b.c` | `fork` de verdad, respetando el límite K, con la espera de cada actividad |
 | `paso6.c` | pipes: insumos de entrada y mensaje de resultado |
 | `paso7.c` | fallos aislados por rama, con la cascada de abortadas |
 | `paso8.c` | Ctrl+C limpio: sin zombis ni señales perdidas |
